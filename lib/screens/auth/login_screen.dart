@@ -24,8 +24,15 @@ class _LoginScreenState extends State<LoginScreen>
   bool _usernameError = false;
   bool _passwordError = false;
 
-  late final AnimationController _animController;
-  late final Animation<double> _fadeAnim;
+  late final AnimationController _animController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 800),
+  )..forward();
+
+  late final Animation<double> _fadeAnim = CurvedAnimation(
+    parent: _animController,
+    curve: Curves.easeIn,
+  );
 
   // Brand colors
   final Color _primaryColor = Colors.teal;
@@ -34,11 +41,7 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeIn);
+
     _animController.forward();
     _loadRememberMe();
 
