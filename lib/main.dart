@@ -1,8 +1,7 @@
-// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'theme.dart'; // ← new
-import 'screens/auth/auth_gate.dart';
+import 'theme.dart';
+import 'app_router.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,8 +15,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Business Management App',
-      theme: AppTheme.light, // ← updated
-      home: const AuthGate(),
+      theme: AppTheme.light,
+      initialRoute: AppRouter.authGate,
+      onGenerateRoute: AppRouter.generateRoute,
     );
   }
 }
