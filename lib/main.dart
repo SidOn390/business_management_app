@@ -1,5 +1,7 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'theme.dart'; // ← new
 import 'screens/auth/auth_gate.dart';
 
 void main() async {
@@ -14,7 +16,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Business Management App',
-      theme: ThemeData(primarySwatch: Colors.blue),
+      theme: AppTheme.light, // ← updated
       home: const AuthGate(),
     );
   }
