@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "858492692446",
+    "project_id": "cold-storage-inventory",
+    "storage_bucket": "cold-storage-inventory.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:858492692446:android:3999f10066614fbec79f4f",
+        "android_client_info": {
+          "package_name": "com.example.business_management_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCa38U_jCqFFsj1_OVb33xPhZj3oI04sxs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
