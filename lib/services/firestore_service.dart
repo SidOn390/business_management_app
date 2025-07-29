@@ -6,7 +6,6 @@ class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   // ─── Cold Storages ─────────────────────────────────────────────────────
-  /// Stream of cold storages as list of {id, name}
   Stream<List<Map<String, dynamic>>> getColdStorages() => _db
       .collection('cold_storages')
       .orderBy('name')
@@ -26,9 +25,9 @@ class FirestoreService {
   Future<void> deleteColdStorage(String id) =>
       _db.collection('cold_storages').doc(id).delete();
 
-  // ─── Product Types ────────────────────────────────────────────────────
-  Stream<List<Map<String, dynamic>>> getProductTypes() => _db
-      .collection('product_types')
+  // ─── Products ───────────────────────────────────────────────────────────
+  Stream<List<Map<String, dynamic>>> getProducts() => _db
+      .collection('products')
       .orderBy('name')
       .snapshots()
       .map(
@@ -37,14 +36,14 @@ class FirestoreService {
             .toList(),
       );
 
-  Future<void> addProductType(String name) =>
-      _db.collection('product_types').add({'name': name.trim()});
+  Future<void> addProduct(String name) =>
+      _db.collection('products').add({'name': name.trim()});
 
-  Future<void> updateProductType(String id, String newName) =>
-      _db.collection('product_types').doc(id).update({'name': newName.trim()});
+  Future<void> updateProduct(String id, String newName) =>
+      _db.collection('products').doc(id).update({'name': newName.trim()});
 
-  Future<void> deleteProductType(String id) =>
-      _db.collection('product_types').doc(id).delete();
+  Future<void> deleteProduct(String id) =>
+      _db.collection('products').doc(id).delete();
 
   // ─── Brands ───────────────────────────────────────────────────────────
   Stream<List<Map<String, dynamic>>> getBrands() => _db

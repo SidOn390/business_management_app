@@ -4,15 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../services/firestore_service.dart';
 
-class ProductTypeMasterScreen extends StatefulWidget {
-  const ProductTypeMasterScreen({Key? key}) : super(key: key);
+class ProductMasterScreen extends StatefulWidget {
+  const ProductMasterScreen({Key? key}) : super(key: key);
 
   @override
-  _ProductTypeMasterScreenState createState() =>
-      _ProductTypeMasterScreenState();
+  _ProductMasterScreenState createState() =>
+      _ProductMasterScreenState();
 }
 
-class _ProductTypeMasterScreenState extends State<ProductTypeMasterScreen> {
+class _ProductMasterScreenState extends State<ProductMasterScreen> {
   final FirestoreService _firestore = FirestoreService();
   final TextEditingController _textCtrl = TextEditingController();
   final TextEditingController _searchCtrl = TextEditingController();
@@ -114,7 +114,7 @@ class _ProductTypeMasterScreenState extends State<ProductTypeMasterScreen> {
                           }
                           try {
                             final existing = await _firestore
-                                .getProductTypes()
+                                .getProducts()
                                 .first;
                             final lowerNames = existing
                                 .map((e) => (e['name'] as String).toLowerCase())
@@ -127,7 +127,7 @@ class _ProductTypeMasterScreenState extends State<ProductTypeMasterScreen> {
                                 });
                                 return;
                               }
-                              await _firestore.addProductType(name);
+                              await _firestore.addProduct(name);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 _snack(
                                   'Product Added successfully',
@@ -149,7 +149,7 @@ class _ProductTypeMasterScreenState extends State<ProductTypeMasterScreen> {
                                 });
                                 return;
                               }
-                              await _firestore.updateProductType(id, name);
+                              await _firestore.updateProduct(id, name);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 _snack(
                                   'Product Updated successfully',
@@ -195,7 +195,7 @@ class _ProductTypeMasterScreenState extends State<ProductTypeMasterScreen> {
       ),
     );
     if (confirm == true) {
-      await _firestore.deleteProductType(id);
+      await _firestore.deleteProduct(id);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(_snack('Deleted successfully', Colors.red));
@@ -231,7 +231,7 @@ class _ProductTypeMasterScreenState extends State<ProductTypeMasterScreen> {
             const SizedBox(height: 16),
             Expanded(
               child: StreamBuilder<List<Map<String, dynamic>>>(
-                stream: _firestore.getProductTypes(),
+                stream: _firestore.getProducts(),
                 builder: (context, snap) {
                   if (snap.hasError) {
                     return Center(

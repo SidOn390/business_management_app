@@ -12,12 +12,23 @@ import 'firebase_options.dart';
 import 'theme.dart';
 import 'app_router.dart';
 import 'screens/auth/auth_gate.dart';
+import '../../services/master_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // --- START OF CHANGE: safely preload master data ---
+  try {
+    await MasterService.loadAllMasters();
+    debugPrint('✅ Master data preloaded successfully');
+  } catch (e, st) {
+    // On Web, this will catch permission-denied if not logged in yet
+    debugPrint('⚠️ Warning: could not preload master data: $e');
+    debugPrint(st.toString());
+  }
+  // --- END OF CHANGE ---
 
   if (kIsWeb) {
     // Persist login across sessions on Web

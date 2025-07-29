@@ -12,7 +12,7 @@ import 'screens/billing_checker/billing_checker_screen.dart';
 import 'screens/reports/reports_screen.dart';
 import 'screens/masters/masters_menu_screen.dart';
 import 'screens/masters/cold_storage_master_screen.dart';
-import 'screens/masters/product_type_master_screen.dart';
+import 'screens/masters/product_master_screen.dart';
 import 'screens/masters/brand_master_screen.dart';
 
 class AppRouter {
@@ -75,7 +75,7 @@ class AppRouter {
         );
       case productTypeMaster:
         return MaterialPageRoute(
-          builder: (_) => screenBuilder(const ProductTypeMasterScreen()),
+          builder: (_) => screenBuilder(const ProductMasterScreen()),
         );
       case brandMaster:
         return MaterialPageRoute(
