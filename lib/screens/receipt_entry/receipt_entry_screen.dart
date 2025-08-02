@@ -1,29 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-
-void main() {
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Autocomplete Demo',
-      theme: ThemeData(
-        primarySwatch: Colors.teal,
-        useMaterial3: true,
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.all(Radius.circular(8.0)),
-          ),
-        ),
-      ),
-      home: const ReceiptEntryScreen(),
-    );
-  }
-}
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:business_management_app/services/firestore_service.dart';
 
 class ReceiptEntryScreen extends StatefulWidget {
   const ReceiptEntryScreen({super.key});
@@ -33,96 +12,426 @@ class ReceiptEntryScreen extends StatefulWidget {
 }
 
 class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
-  static const List<String> _products = <String>[
-    'Apple',
-    'Banana',
-    'Orange',
-    'Grape',
-    'Pineapple',
-    'Strawberry',
-    'Watermelon',
-  ];
+  final _formKey = GlobalKey<FormState>();
+  final _firestoreService = FirestoreService();
 
+  final _receiptNumberController = TextEditingController();
+  final _coldStorageController = TextEditingController();
+  final _productController = TextEditingController();
+  final _brandController = TextEditingController();
+  final _quantityController = TextEditingController();
+  final _rateController = TextEditingController();
+  final _narrationController = TextEditingController();
+  final _dateController = TextEditingController();
+
+  final _receiptNumberFocusNode = FocusNode();
+  final _coldStorageFocusNode = FocusNode();
+  final _dateFocusNode = FocusNode();
+  final _productFocusNode = FocusNode();
+  final _brandFocusNode = FocusNode();
+  final _quantityFocusNode = FocusNode();
+  final _rateFocusNode = FocusNode();
+  final _narrationFocusNode = FocusNode();
+  final _saveButtonFocusNode = FocusNode();
+
+  DateTime _selectedDate = DateTime.now();
+  String? _selectedColdStorage;
   String? _selectedProduct;
-  final FocusNode _brandFocus = FocusNode();
-  final TextEditingController _brandController = TextEditingController();
+  String? _selectedBrand;
+
+  List<String> _coldStorageOptions = [];
+  List<String> _productOptions = [];
+  List<String> _brandOptions = [];
+
+  bool _isLoading = true;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _dateController.text = DateFormat('dd-MM-yy').format(_selectedDate);
+    _fetchMasterData();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FocusScope.of(context).requestFocus(_receiptNumberFocusNode);
+    });
+  }
 
   @override
   void dispose() {
+    _receiptNumberController.dispose();
+    _coldStorageController.dispose();
+    _productController.dispose();
     _brandController.dispose();
-    _brandFocus.dispose();
+    _quantityController.dispose();
+    _rateController.dispose();
+    _narrationController.dispose();
+    _dateController.dispose();
+
+    _receiptNumberFocusNode.dispose();
+    _coldStorageFocusNode.dispose();
+    _dateFocusNode.dispose();
+    _productFocusNode.dispose();
+    _brandFocusNode.dispose();
+    _quantityFocusNode.dispose();
+    _rateFocusNode.dispose();
+    _narrationFocusNode.dispose();
+    _saveButtonFocusNode.dispose();
     super.dispose();
   }
 
-  void _onProductSelected(String selection) {
-    setState(() {
-      _selectedProduct = selection;
-    });
-    print('Selected product: $selection');
-    FocusScope.of(context).requestFocus(_brandFocus);
+  Future<void> _fetchMasterData() async {
+    try {
+      final storagesList = await _firestoreService.getColdStorages().first;
+      final productsList = await _firestoreService.getProducts().first;
+      final brandsList = await _firestoreService.getBrands().first;
+
+      setState(() {
+        _coldStorageOptions = storagesList
+            .map((map) => map['name'] as String)
+            .toList();
+        _productOptions = productsList
+            .map((map) => map['name'] as String)
+            .toList();
+        _brandOptions = brandsList.map((map) => map['name'] as String).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error fetching master data: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+        _dateController.text = DateFormat('dd-MM-yy').format(_selectedDate);
+      });
+      FocusScope.of(context).requestFocus(_productFocusNode);
+    }
+  }
+
+  Future<void> _saveReceipt() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final receiptNumber = _receiptNumberController.text;
+      final coldStorage = _selectedColdStorage!;
+      final bool isDuplicate = await _firestoreService.doesReceiptExist(
+        receiptNumber,
+        coldStorage,
+      );
+
+      if (isDuplicate) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Error: Receipt #$receiptNumber already exists for $coldStorage.',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        setState(() => _isSaving = false);
+        return;
+      }
+
+      final int quantity = int.parse(_quantityController.text);
+      final receiptData = {
+        'receiptNumber': receiptNumber,
+        'coldStorageName': coldStorage,
+        'inwardDate': Timestamp.fromDate(_selectedDate),
+        'productName': _selectedProduct,
+        'brandName': _selectedBrand,
+        'inwardQuantity': quantity,
+        'remainingQuantity': quantity,
+        'rate': double.parse(_rateController.text),
+        'narration': _narrationController.text.trim(),
+        'isPaid': false,
+        'status': 'Active',
+      };
+
+      debugPrint('--- SAVING RECEIPT DATA ---');
+      debugPrint(receiptData.toString());
+      debugPrint('---------------------------');
+
+      // await _firestoreService.addReceipt(receiptData);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Receipt data printed to console!'),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+
+      _formKey.currentState!.reset();
+      _receiptNumberController.clear();
+      _coldStorageController.clear();
+      _productController.clear();
+      _brandController.clear();
+      _quantityController.clear();
+      _rateController.clear();
+      _narrationController.clear();
+      setState(() {
+        _selectedDate = DateTime.now();
+        _dateController.text = DateFormat('dd-MM-yy').format(_selectedDate);
+        _selectedColdStorage = null;
+        _selectedProduct = null;
+        _selectedBrand = null;
+      });
+      FocusScope.of(context).requestFocus(_receiptNumberFocusNode);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error processing receipt: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Receipt Entry')),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            Autocomplete<String>(
-              optionsBuilder: (TextEditingValue textEditingValue) {
-                if (textEditingValue.text.isEmpty) {
-                  return const Iterable<String>.empty();
-                }
-                return _products.where((String option) {
-                  return option.toLowerCase().contains(
-                    textEditingValue.text.toLowerCase(),
-                  );
-                });
-              },
-
-              // This is called when the user selects an item, either by
-              // tapping it or by pressing Enter on a highlighted item.
-              // This is the single source of truth for our selection logic.
-              onSelected: (String selection) {
-                _onProductSelected(selection);
-              },
-
-              fieldViewBuilder:
-                  (
-                    BuildContext context,
-                    TextEditingController fieldTextEditingController,
-                    FocusNode fieldFocusNode,
-                    VoidCallback onFieldSubmitted,
-                  ) {
-                    return TextField(
-                      controller: fieldTextEditingController,
-                      focusNode: fieldFocusNode,
-                      decoration: const InputDecoration(labelText: 'Product'),
-
-                      // ## THE FIX IS HERE ##
-                      // Instead of writing our own logic, we just call the
-                      // onFieldSubmitted callback provided by the Autocomplete builder.
-                      // This callback is smart enough to know which item is highlighted.
-                      onSubmitted: (_) {
-                        onFieldSubmitted();
+      appBar: AppBar(title: const Text('New Receipt Entry')),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextFormField(
+                      controller: _receiptNumberController,
+                      focusNode: _receiptNumberFocusNode,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Receipt Number',
+                      ),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Please enter a receipt number'
+                          : null,
+                      onFieldSubmitted: (_) => FocusScope.of(
+                        context,
+                      ).requestFocus(_coldStorageFocusNode),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildAutocompleteField(
+                      focusNode: _coldStorageFocusNode,
+                      labelText: 'Cold Storage',
+                      options: _coldStorageOptions,
+                      onSelected: (selection) {
+                        setState(() {
+                          _selectedColdStorage = selection;
+                          _coldStorageController.text = selection;
+                        });
+                        FocusScope.of(context).requestFocus(_dateFocusNode);
                       },
-                    );
-                  },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      focusNode: _dateFocusNode,
+                      controller: _dateController,
+                      decoration: InputDecoration(
+                        labelText: 'Inward Date',
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.calendar_today),
+                          onPressed: () => _selectDate(context),
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty)
+                          return 'Please enter a date';
+                        try {
+                          DateFormat('dd-MM-yy').parseStrict(value);
+                          return null;
+                        } catch (e) {
+                          return 'Invalid format (dd-MM-yy)';
+                        }
+                      },
+                      onChanged: (value) {
+                        try {
+                          final date = DateFormat(
+                            'dd-MM-yy',
+                          ).parseStrict(value);
+                          setState(() => _selectedDate = date);
+                        } catch (e) {
+                          /* Ignore parsing errors while typing */
+                        }
+                      },
+                      onFieldSubmitted: (_) => FocusScope.of(
+                        context,
+                      ).requestFocus(_productFocusNode),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildAutocompleteField(
+                      focusNode: _productFocusNode,
+                      labelText: 'Product',
+                      options: _productOptions,
+                      onSelected: (selection) {
+                        setState(() {
+                          _selectedProduct = selection;
+                          _productController.text = selection;
+                        });
+                        FocusScope.of(context).requestFocus(_brandFocusNode);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    _buildAutocompleteField(
+                      focusNode: _brandFocusNode,
+                      labelText: 'Brand',
+                      options: _brandOptions,
+                      onSelected: (selection) {
+                        setState(() {
+                          _selectedBrand = selection;
+                          _brandController.text = selection;
+                        });
+                        FocusScope.of(context).requestFocus(_quantityFocusNode);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _quantityController,
+                      focusNode: _quantityFocusNode,
+                      decoration: const InputDecoration(labelText: 'Quantity'),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Please enter quantity'
+                          : null,
+                      onFieldSubmitted: (_) =>
+                          FocusScope.of(context).requestFocus(_rateFocusNode),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _rateController,
+                      focusNode: _rateFocusNode,
+                      decoration: const InputDecoration(labelText: 'Rate'),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d+\.?\d{0,2}'),
+                        ),
+                      ],
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Please enter a rate'
+                          : null,
+                      onFieldSubmitted: (_) => FocusScope.of(
+                        context,
+                      ).requestFocus(_narrationFocusNode),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _narrationController,
+                      focusNode: _narrationFocusNode,
+                      decoration: const InputDecoration(
+                        labelText: 'Narration (Optional)',
+                      ),
+                      textCapitalization: TextCapitalization.sentences,
+                      maxLines: 2,
+                      textInputAction: TextInputAction.next,
+                      onFieldSubmitted: (_) => FocusScope.of(
+                        context,
+                      ).requestFocus(_saveButtonFocusNode),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      focusNode: _saveButtonFocusNode,
+                      onPressed: _isSaving ? null : _saveReceipt,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        textStyle: const TextStyle(fontSize: 16),
+                      ),
+                      child: _isSaving
+                          ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Save Receipt'),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 24),
-            TextField(
-              controller: _brandController,
-              focusNode: _brandFocus,
-              decoration: const InputDecoration(labelText: 'Brand'),
-              onSubmitted: (_) {
-                print('Brand entered: ${_brandController.text}');
+    );
+  }
+
+  Widget _buildAutocompleteField({
+    required FocusNode focusNode,
+    required String labelText,
+    required List<String> options,
+    required ValueChanged<String> onSelected,
+    TextEditingController? controller,
+  }) {
+    return Autocomplete<String>(
+      optionsBuilder: (TextEditingValue textEditingValue) {
+        if (textEditingValue.text.isEmpty) {
+          return const Iterable<String>.empty();
+        }
+        return options.where((String option) {
+          return option.toLowerCase().contains(
+            textEditingValue.text.toLowerCase(),
+          );
+        });
+      },
+      onSelected: onSelected,
+      fieldViewBuilder:
+          (
+            BuildContext context,
+            TextEditingController fieldTextEditingController,
+            FocusNode fieldFocusNode,
+            VoidCallback onFieldSubmitted,
+          ) {
+            return TextFormField(
+              controller: controller ?? fieldTextEditingController,
+              focusNode: focusNode,
+              decoration: InputDecoration(labelText: labelText),
+              validator: (value) {
+                if (value == null || value.isEmpty)
+                  return 'Please select a $labelText';
+                if (!options.contains(value))
+                  return 'Please select a valid $labelText from the list';
+                return null;
               },
-            ),
-          ],
-        ),
-      ),
+              onFieldSubmitted: (_) {
+                onFieldSubmitted();
+              },
+            );
+          },
     );
   }
 }

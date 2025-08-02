@@ -64,4 +64,21 @@ class FirestoreService {
 
   Future<void> deleteBrand(String id) =>
       _db.collection('brands').doc(id).delete();
+
+  // In lib/services/firestore_service.dart
+
+  // Checks if a receipt with the given number already exists for a specific cold storage
+  Future<bool> doesReceiptExist(
+    String receiptNumber,
+    String coldStorageName,
+  ) async {
+    final query = await _db
+        .collection('receipts')
+        .where('receiptNumber', isEqualTo: receiptNumber)
+        .where('coldStorageName', isEqualTo: coldStorageName)
+        .limit(1)
+        .get();
+
+    return query.docs.isNotEmpty;
+  }
 }
