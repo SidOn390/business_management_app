@@ -1,338 +1,128 @@
-// 📁 lib/screens/receipt_entry/receipt_entry_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
-import 'package:flutter/widgets.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/scheduler.dart';
-import 'package:flutter/semantics.dart';
-import 'package:flutter/widgets.dart';
-import 'package:flutter/src/services/raw_keyboard.dart';
-import '../../services/master_service.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Autocomplete Demo',
+      theme: ThemeData(
+        primarySwatch: Colors.teal,
+        useMaterial3: true,
+        inputDecorationTheme: const InputDecorationTheme(
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.all(Radius.circular(8.0)),
+          ),
+        ),
+      ),
+      home: const ReceiptEntryScreen(),
+    );
+  }
+}
 
 class ReceiptEntryScreen extends StatefulWidget {
-  const ReceiptEntryScreen({Key? key}) : super(key: key);
+  const ReceiptEntryScreen({super.key});
 
   @override
   State<ReceiptEntryScreen> createState() => _ReceiptEntryScreenState();
 }
 
 class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
-  final _formKey = GlobalKey<FormState>();
-  bool _loading = true;
+  static const List<String> _products = <String>[
+    'Apple',
+    'Banana',
+    'Orange',
+    'Grape',
+    'Pineapple',
+    'Strawberry',
+    'Watermelon',
+  ];
 
-  List<String> _coldStorages = [];
-  List<String> _products = [];
-  List<String> _brands = [];
-
-  String? _coldValue;
-  String? _productValue;
-  String? _brandValue;
-  DateTime _selectedDate = DateTime.now();
-
-  final TextEditingController _receiptController = TextEditingController();
-  final TextEditingController _quantityController = TextEditingController();
-  final TextEditingController _rateController = TextEditingController();
-  final TextEditingController _narrationController = TextEditingController();
-
-  final FocusNode _dateFocus = FocusNode();
-  final FocusNode _coldFocus = FocusNode();
-  final FocusNode _productFocus = FocusNode();
+  String? _selectedProduct;
   final FocusNode _brandFocus = FocusNode();
-  final FocusNode _receiptFocus = FocusNode();
-  final FocusNode _quantityFocus = FocusNode();
-  final FocusNode _rateFocus = FocusNode();
-  final FocusNode _narrationFocus = FocusNode();
+  final TextEditingController _brandController = TextEditingController();
 
   @override
-  void initState() {
-    super.initState();
-    _loadMasters();
+  void dispose() {
+    _brandController.dispose();
+    _brandFocus.dispose();
+    super.dispose();
   }
 
-  Future<void> _loadMasters() async {
-    try {
-      await MasterService.loadAllMasters();
-      setState(() {
-        _coldStorages = MasterService.coldStorages;
-        _products = MasterService.products;
-        _brands = MasterService.brands;
-        _loading = false;
-      });
-    } catch (_) {
-      setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _addMaster(
-    String title,
-    Future<void> Function(String) onAdd,
-  ) async {
-    final ctrl = TextEditingController();
-    await showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text('Add New $title'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: InputDecoration(hintText: 'Enter $title'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final val = ctrl.text.trim();
-              if (val.isNotEmpty) {
-                await onAdd(val);
-                await _loadMasters();
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) setState(() => _selectedDate = picked);
-  }
-
-  void _save() {
-    if (!_formKey.currentState!.validate()) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Receipt saved')));
-    _formKey.currentState!.reset();
+  void _onProductSelected(String selection) {
     setState(() {
-      _coldValue = null;
-      _productValue = null;
-      _brandValue = null;
-      _selectedDate = DateTime.now();
+      _selectedProduct = selection;
     });
-  }
-
-  Widget _autocompleteField({
-    required String label,
-    required List<String> items,
-    required String? value,
-    required void Function(String) onSelected,
-    required FocusNode focusNode,
-    required FocusNode nextFocusNode,
-    required Future<void> Function() onAdd,
-  }) {
-    return Autocomplete<String>(
-      initialValue: TextEditingValue(text: value ?? ''),
-      optionsBuilder: (text) {
-        if (text.text.isEmpty) return items;
-        return items.where(
-          (option) => option.toLowerCase().contains(text.text.toLowerCase()),
-        );
-      },
-      onSelected: (selection) {
-        onSelected(selection);
-        FocusScope.of(context).requestFocus(nextFocusNode);
-      },
-      fieldViewBuilder: (context, ctrl, fn, onFieldSubmitted) {
-        return RawKeyboardListener(
-          focusNode: FocusNode(),
-          onKey: (event) {
-            if (event is RawKeyDownEvent &&
-                event.logicalKey == LogicalKeyboardKey.enter) {
-              final text = ctrl.text;
-              final match = items.firstWhere(
-                (item) => item.toLowerCase() == text.toLowerCase(),
-                orElse: () => '',
-              );
-              if (match.isNotEmpty) {
-                onSelected(match);
-              }
-              FocusScope.of(context).requestFocus(nextFocusNode);
-            }
-          },
-          child: TextFormField(
-            controller: ctrl,
-            focusNode: focusNode,
-            decoration: InputDecoration(
-              labelText: label,
-              border: const OutlineInputBorder(),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.add_circle_outline),
-                onPressed: onAdd,
-              ),
-            ),
-            textInputAction: TextInputAction.next,
-            onFieldSubmitted: (_) {
-              final text = ctrl.text;
-              final match = items.firstWhere(
-                (item) => item.toLowerCase() == text.toLowerCase(),
-                orElse: () => '',
-              );
-              if (match.isNotEmpty) {
-                onSelected(match);
-              }
-              FocusScope.of(context).requestFocus(nextFocusNode);
-            },
-            validator: (v) =>
-                (v == null || v.isEmpty) ? '$label required' : null,
-          ),
-        );
-      },
-    );
+    print('Selected product: $selection');
+    FocusScope.of(context).requestFocus(_brandFocus);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Receipt Entry')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
-                child: ListView(
-                  children: [
-                    TextFormField(
-                      readOnly: true,
-                      focusNode: _dateFocus,
-                      controller: TextEditingController(
-                        text: DateFormat('dd-MM-yyyy').format(_selectedDate),
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'Date',
-                        border: const OutlineInputBorder(),
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.calendar_today),
-                          onPressed: _pickDate,
-                        ),
-                      ),
-                      textInputAction: TextInputAction.next,
-                      onFieldSubmitted: (_) =>
-                          FocusScope.of(context).requestFocus(_coldFocus),
-                    ),
-                    const SizedBox(height: 16),
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          children: [
+            Autocomplete<String>(
+              optionsBuilder: (TextEditingValue textEditingValue) {
+                if (textEditingValue.text.isEmpty) {
+                  return const Iterable<String>.empty();
+                }
+                return _products.where((String option) {
+                  return option.toLowerCase().contains(
+                    textEditingValue.text.toLowerCase(),
+                  );
+                });
+              },
 
-                    _autocompleteField(
-                      label: 'Cold Storage',
-                      items: _coldStorages,
-                      value: _coldValue,
-                      onSelected: (v) => setState(() => _coldValue = v),
-                      focusNode: _coldFocus,
-                      nextFocusNode: _productFocus,
-                      onAdd: () => _addMaster(
-                        'Cold Storage',
-                        MasterService.addColdStorage,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
+              // This is called when the user selects an item, either by
+              // tapping it or by pressing Enter on a highlighted item.
+              // This is the single source of truth for our selection logic.
+              onSelected: (String selection) {
+                _onProductSelected(selection);
+              },
 
-                    _autocompleteField(
-                      label: 'Product',
-                      items: _products,
-                      value: _productValue,
-                      onSelected: (v) => setState(() => _productValue = v),
-                      focusNode: _productFocus,
-                      nextFocusNode: _brandFocus,
-                      onAdd: () =>
-                          _addMaster('Product', MasterService.addProduct),
-                    ),
-                    const SizedBox(height: 16),
+              fieldViewBuilder:
+                  (
+                    BuildContext context,
+                    TextEditingController fieldTextEditingController,
+                    FocusNode fieldFocusNode,
+                    VoidCallback onFieldSubmitted,
+                  ) {
+                    return TextField(
+                      controller: fieldTextEditingController,
+                      focusNode: fieldFocusNode,
+                      decoration: const InputDecoration(labelText: 'Product'),
 
-                    _autocompleteField(
-                      label: 'Brand',
-                      items: _brands,
-                      value: _brandValue,
-                      onSelected: (v) => setState(() => _brandValue = v),
-                      focusNode: _brandFocus,
-                      nextFocusNode: _receiptFocus,
-                      onAdd: () => _addMaster('Brand', MasterService.addBrand),
-                    ),
-                    const SizedBox(height: 16),
-
-                    TextFormField(
-                      controller: _receiptController,
-                      focusNode: _receiptFocus,
-                      decoration: const InputDecoration(
-                        labelText: 'Receipt Number',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      textInputAction: TextInputAction.next,
-                      onFieldSubmitted: (_) =>
-                          FocusScope.of(context).requestFocus(_quantityFocus),
-                      validator: (v) => (v == null || v.isEmpty)
-                          ? 'Receipt Number required'
-                          : null,
-                    ),
-                    const SizedBox(height: 16),
-
-                    TextFormField(
-                      controller: _quantityController,
-                      focusNode: _quantityFocus,
-                      decoration: const InputDecoration(
-                        labelText: 'Quantity',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      textInputAction: TextInputAction.next,
-                      onFieldSubmitted: (_) =>
-                          FocusScope.of(context).requestFocus(_rateFocus),
-                      validator: (v) =>
-                          (v == null || v.isEmpty) ? 'Quantity required' : null,
-                    ),
-                    const SizedBox(height: 16),
-
-                    TextFormField(
-                      controller: _rateController,
-                      focusNode: _rateFocus,
-                      decoration: const InputDecoration(
-                        labelText: 'Rate (Optional)',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      textInputAction: TextInputAction.next,
-                      onFieldSubmitted: (_) =>
-                          FocusScope.of(context).requestFocus(_narrationFocus),
-                    ),
-                    const SizedBox(height: 16),
-
-                    TextFormField(
-                      controller: _narrationController,
-                      focusNode: _narrationFocus,
-                      decoration: const InputDecoration(
-                        labelText: 'Narration (Optional)',
-                        border: OutlineInputBorder(),
-                      ),
-                      textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) => _save(),
-                    ),
-                    const SizedBox(height: 24),
-
-                    ElevatedButton(
-                      onPressed: _save,
-                      child: const Text('Save Receipt'),
-                    ),
-                  ],
-                ),
-              ),
+                      // ## THE FIX IS HERE ##
+                      // Instead of writing our own logic, we just call the
+                      // onFieldSubmitted callback provided by the Autocomplete builder.
+                      // This callback is smart enough to know which item is highlighted.
+                      onSubmitted: (_) {
+                        onFieldSubmitted();
+                      },
+                    );
+                  },
             ),
+            const SizedBox(height: 24),
+            TextField(
+              controller: _brandController,
+              focusNode: _brandFocus,
+              decoration: const InputDecoration(labelText: 'Brand'),
+              onSubmitted: (_) {
+                print('Brand entered: ${_brandController.text}');
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -33,10 +33,11 @@ Future<void> main() async {
   if (kIsWeb) {
     // Persist login across sessions on Web
     await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+
     // Enable Firestore persistence with tab sync, ignore if already enabled
     try {
-      await FirebaseFirestore.instance.enablePersistence(
-        const PersistenceSettings(synchronizeTabs: true),
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
       );
     } on FirebaseException catch (e) {
       if (e.code != 'failed-precondition') {
@@ -59,7 +60,6 @@ Future<void> main() async {
   if (!kIsWeb) {
     await FirebaseAnalytics.instance.logAppOpen();
   }
-
   runApp(const MyApp());
 }
 
