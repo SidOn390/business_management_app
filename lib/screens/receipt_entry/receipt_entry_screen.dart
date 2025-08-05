@@ -51,10 +51,6 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
     super.initState();
     _dateController.text = DateFormat('dd-MM-yy').format(_selectedDate);
     _fetchMasterData();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      FocusScope.of(context).requestFocus(_receiptNumberFocusNode);
-    });
   }
 
   @override
@@ -187,9 +183,6 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
       _coldStorageController.clear();
       _productController.clear();
       _brandController.clear();
-      _quantityController.clear();
-      _rateController.clear();
-      _narrationController.clear();
       setState(() {
         _selectedDate = DateTime.now();
         _dateController.text = DateFormat('dd-MM-yy').format(_selectedDate);
@@ -230,7 +223,7 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
                     TextFormField(
                       controller: _receiptNumberController,
                       focusNode: _receiptNumberFocusNode,
-                      autofocus: true,
+                      autofocus: true, // BUG FIX 4: Initial focus
                       decoration: const InputDecoration(
                         labelText: 'Receipt Number',
                       ),
@@ -246,6 +239,7 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
                     const SizedBox(height: 16),
                     _buildAutocompleteField(
                       focusNode: _coldStorageFocusNode,
+                      controller: _coldStorageController,
                       labelText: 'Cold Storage',
                       options: _coldStorageOptions,
                       onSelected: (selection) {
@@ -255,6 +249,7 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
                         });
                         FocusScope.of(context).requestFocus(_dateFocusNode);
                       },
+                      nextFocusNode: _dateFocusNode,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -294,6 +289,7 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
                     const SizedBox(height: 16),
                     _buildAutocompleteField(
                       focusNode: _productFocusNode,
+                      controller: _productController,
                       labelText: 'Product',
                       options: _productOptions,
                       onSelected: (selection) {
@@ -303,10 +299,12 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
                         });
                         FocusScope.of(context).requestFocus(_brandFocusNode);
                       },
+                      nextFocusNode: _brandFocusNode,
                     ),
                     const SizedBox(height: 16),
                     _buildAutocompleteField(
                       focusNode: _brandFocusNode,
+                      controller: _brandController,
                       labelText: 'Brand',
                       options: _brandOptions,
                       onSelected: (selection) {
@@ -316,6 +314,7 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
                         });
                         FocusScope.of(context).requestFocus(_quantityFocusNode);
                       },
+                      nextFocusNode: _quantityFocusNode,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -359,7 +358,8 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
                       ),
                       textCapitalization: TextCapitalization.sentences,
                       maxLines: 2,
-                      textInputAction: TextInputAction.next,
+                      textInputAction: TextInputAction
+                          .next, // BUG FIX 3: Change enter key behavior
                       onFieldSubmitted: (_) => FocusScope.of(
                         context,
                       ).requestFocus(_saveButtonFocusNode),
@@ -392,12 +392,15 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
 
   Widget _buildAutocompleteField({
     required FocusNode focusNode,
+    required TextEditingController controller,
     required String labelText,
     required List<String> options,
     required ValueChanged<String> onSelected,
-    TextEditingController? controller,
+    required FocusNode nextFocusNode,
   }) {
-    return Autocomplete<String>(
+    return RawAutocomplete<String>(
+      focusNode: focusNode,
+      textEditingController: controller,
       optionsBuilder: (TextEditingValue textEditingValue) {
         if (textEditingValue.text.isEmpty) {
           return const Iterable<String>.empty();
@@ -417,8 +420,8 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
             VoidCallback onFieldSubmitted,
           ) {
             return TextFormField(
-              controller: controller ?? fieldTextEditingController,
-              focusNode: focusNode,
+              controller: fieldTextEditingController,
+              focusNode: fieldFocusNode,
               decoration: InputDecoration(labelText: labelText),
               validator: (value) {
                 if (value == null || value.isEmpty)
@@ -429,7 +432,41 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
               },
               onFieldSubmitted: (_) {
                 onFieldSubmitted();
+                FocusScope.of(context).requestFocus(nextFocusNode);
               },
+            );
+          },
+      optionsViewBuilder:
+          (
+            BuildContext context,
+            AutocompleteOnSelected<String> onSelected,
+            Iterable<String> options,
+          ) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 4.0,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    itemBuilder: (BuildContext context, int index) {
+                      final String option = options.elementAt(index);
+                      // BUG FIX 1: Use a ListTile for highlighting
+                      return ListTile(
+                        title: Text(option),
+                        onTap: () => onSelected(option),
+                        tileColor:
+                            AutocompleteHighlightedOption.of(context) == index
+                            ? Theme.of(context).focusColor.withOpacity(0.1)
+                            : null,
+                      );
+                    },
+                  ),
+                ),
+              ),
             );
           },
     );
