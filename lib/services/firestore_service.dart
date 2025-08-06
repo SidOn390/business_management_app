@@ -65,9 +65,14 @@ class FirestoreService {
   Future<void> deleteBrand(String id) =>
       _db.collection('brands').doc(id).delete();
 
-  // In lib/services/firestore_service.dart
+  // ─── Receipts ───────────────────────────────────────────────────────────
 
-  // Checks if a receipt with the given number already exists for a specific cold storage
+  /// Adds a new receipt document to the 'receipts' collection.
+  Future<void> addReceipt(Map<String, dynamic> receiptData) {
+    return _db.collection('receipts').add(receiptData);
+  }
+
+  /// Checks if a receipt with the given number already exists for a specific cold storage
   Future<bool> doesReceiptExist(
     String receiptNumber,
     String coldStorageName,
@@ -80,5 +85,36 @@ class FirestoreService {
         .get();
 
     return query.docs.isNotEmpty;
+  }
+
+  // NEW: Generic method to add a master data item (e.g., product, brand)
+  ///
+  /// Adds a new master data item to the specified collection if it doesn't already exist.
+  /// collection: The name of the collection (e.g., 'products', 'brands').
+  /// name: The name of the item to add.
+  Future<void> addMasterItem(String collection, String name) async {
+    try {
+      // Check if an item with the same name already exists (case-insensitive)
+      final querySnapshot = await _db
+          .collection(collection)
+          .where('name_lowercase', isEqualTo: name.toLowerCase())
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        // Item already exists, so we don't need to do anything.
+        print('$name already exists in $collection.');
+        return;
+      }
+
+      // Add the new item
+      await _db.collection(collection).add({
+        'name': name,
+        'name_lowercase': name.toLowerCase(), // For case-insensitive checks
+      });
+    } catch (e) {
+      print('Error adding master item to $collection: $e');
+      rethrow; // Rethrow the error to be caught by the UI
+    }
   }
 }

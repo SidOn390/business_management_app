@@ -1,8 +1,14 @@
+// lib/screens/receipt_entry/receipt_entry_screen.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:another_flushbar/flushbar.dart';
+
 import 'package:business_management_app/services/firestore_service.dart';
+
+enum MasterType { coldStorage, product, brand }
 
 class ReceiptEntryScreen extends StatefulWidget {
   const ReceiptEntryScreen({super.key});
@@ -83,23 +89,54 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
       final brandsList = await _firestoreService.getBrands().first;
 
       setState(() {
-        _coldStorageOptions = storagesList
-            .map((map) => map['name'] as String)
-            .toList();
-        _productOptions = productsList
-            .map((map) => map['name'] as String)
-            .toList();
-        _brandOptions = brandsList.map((map) => map['name'] as String).toList();
+        _coldStorageOptions =
+            storagesList.map((map) => map['name'] as String).toList()
+              ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+        _productOptions =
+            productsList.map((map) => map['name'] as String).toList()
+              ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+        _brandOptions = brandsList.map((map) => map['name'] as String).toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
         _isLoading = false;
       });
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error fetching master data: $e')),
-        );
+        _showTopFlushbar('Error fetching master data: $e', isError: true);
       }
     }
+  }
+
+  // lib/screens/receipt_entry/receipt_entry_screen.dart
+
+  // MODIFIED: This method is now more polished and noticeable.
+  void _showTopFlushbar(String message, {bool isError = false}) {
+    if (!mounted) return;
+    Flushbar(
+      // 1. ADDED A BOLD TITLE
+      title: isError ? "An Error Occurred" : "Success",
+      message: message,
+      // 2. INCREASED DURATION
+      duration: const Duration(seconds: 4),
+      flushbarPosition: FlushbarPosition.TOP,
+      // 3. IMPROVED COLORS
+      backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
+      icon: Icon(
+        isError ? Icons.error_outline : Icons.check_circle_outline,
+        size: 28.0,
+        color: Colors.white,
+      ),
+      // 4. ADDED STYLING TO MAKE IT POP
+      margin: const EdgeInsets.all(8),
+      borderRadius: BorderRadius.circular(8),
+      boxShadows: const [
+        BoxShadow(
+          color: Colors.black45,
+          offset: Offset(0.0, 2.0),
+          blurRadius: 3.0,
+        ),
+      ],
+    ).show(context);
   }
 
   Future<void> _selectDate(BuildContext context) async {
@@ -118,8 +155,39 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
     }
   }
 
+  void _showValidationError(String message, FocusNode node) {
+    _showTopFlushbar(message, isError: true);
+    FocusScope.of(context).requestFocus(node);
+  }
+
   Future<void> _saveReceipt() async {
+    // DEBUG: Log when the save process starts and the current state
+    debugPrint("SAVE RECEIPT: Button pressed.");
+    debugPrint(
+      "--> Value of _selectedColdStorage at save time: '$_selectedColdStorage'",
+    );
+    debugPrint(
+      "--> Value of _selectedProduct at save time: '$_selectedProduct'",
+    );
+    debugPrint("--> Value of _selectedBrand at save time: '$_selectedBrand'");
+
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (_selectedColdStorage == null) {
+      _showValidationError(
+        'Please select a valid Cold Storage.',
+        _coldStorageFocusNode,
+      );
+      return;
+    }
+    if (_selectedProduct == null) {
+      _showValidationError('Please select a valid Product.', _productFocusNode);
+      return;
+    }
+    if (_selectedBrand == null) {
+      _showValidationError('Please select a valid Brand.', _brandFocusNode);
       return;
     }
 
@@ -127,32 +195,12 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
 
     try {
       final receiptNumber = _receiptNumberController.text;
-      final coldStorage = _selectedColdStorage!;
-      final bool isDuplicate = await _firestoreService.doesReceiptExist(
-        receiptNumber,
-        coldStorage,
-      );
-
-      if (isDuplicate) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Error: Receipt #$receiptNumber already exists for $coldStorage.',
-              ),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        setState(() => _isSaving = false);
-        return;
-      }
 
       final int quantity = int.parse(_quantityController.text);
       final receiptData = {
         'receiptNumber': receiptNumber,
-        'coldStorageName': coldStorage,
-        'inwardDate': Timestamp.fromDate(_selectedDate),
+        'coldStorageName': _selectedColdStorage,
+        'inwardDate': _selectedDate.toIso8601String(),
         'productName': _selectedProduct,
         'brandName': _selectedBrand,
         'inwardQuantity': quantity,
@@ -163,20 +211,11 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
         'status': 'Active',
       };
 
-      debugPrint('--- SAVING RECEIPT DATA ---');
+      debugPrint('--- RECEIPT DATA FOR CONSOLE ---');
       debugPrint(receiptData.toString());
-      debugPrint('---------------------------');
+      debugPrint('---------------------------------');
 
-      // await _firestoreService.addReceipt(receiptData);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Receipt data printed to console!'),
-            backgroundColor: Colors.blue,
-          ),
-        );
-      }
+      _showTopFlushbar('Receipt data printed to console!');
 
       _formKey.currentState!.reset();
       _receiptNumberController.clear();
@@ -192,18 +231,127 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
       });
       FocusScope.of(context).requestFocus(_receiptNumberFocusNode);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error processing receipt: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showTopFlushbar('Error processing receipt: $e', isError: true);
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
       }
+    }
+  }
+
+  void _handleSelection(MasterType type, String selection) {
+    // DEBUG: Log which item is being selected
+    debugPrint(
+      "HANDLE SELECTION: Setting selected ${type.name} to '$selection'",
+    );
+    setState(() {
+      switch (type) {
+        case MasterType.coldStorage:
+          _selectedColdStorage = selection;
+          _coldStorageController.text = selection;
+          FocusScope.of(context).requestFocus(_dateFocusNode);
+          break;
+        case MasterType.product:
+          _selectedProduct = selection;
+          _productController.text = selection;
+          FocusScope.of(context).requestFocus(_brandFocusNode);
+          break;
+        case MasterType.brand:
+          _selectedBrand = selection;
+          _brandController.text = selection;
+          FocusScope.of(context).requestFocus(_quantityFocusNode);
+          break;
+      }
+    });
+  }
+
+  Future<void> _handleAddNewItem(MasterType type, String newName) async {
+    // DEBUG: Log when we add a new item
+    debugPrint("HANDLE ADD NEW ITEM: Received '$newName' for ${type.name}");
+    setState(() => _isSaving = true);
+
+    String collectionName;
+    List<String> optionsList;
+    String label;
+
+    switch (type) {
+      case MasterType.coldStorage:
+        collectionName = 'cold_storages';
+        optionsList = _coldStorageOptions;
+        label = 'Cold Storage';
+        break;
+      case MasterType.product:
+        collectionName = 'products';
+        optionsList = _productOptions;
+        label = 'Product';
+        break;
+      case MasterType.brand:
+        collectionName = 'brands';
+        optionsList = _brandOptions;
+        label = 'Brand';
+        break;
+    }
+
+    if (optionsList.any((o) => o.toLowerCase() == newName.toLowerCase())) {
+      final existingOption = optionsList.firstWhere(
+        (o) => o.toLowerCase() == newName.toLowerCase(),
+      );
+      _showTopFlushbar(
+        '"$existingOption" already exists and has been selected.',
+      );
+      _handleSelection(type, existingOption);
+      setState(() => _isSaving = false);
+      return;
+    }
+
+    try {
+      await _firestoreService.addMasterItem(collectionName, newName);
+
+      setState(() {
+        optionsList.add(newName);
+        optionsList.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      });
+      _handleSelection(type, newName);
+      _showTopFlushbar('$label "$newName" added successfully.');
+    } catch (e) {
+      _showTopFlushbar('Error adding new $label: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  void _handleTextChanged(MasterType type, String value) {
+    // DEBUG: Log every time the text changes and what the current state is.
+    debugPrint("HANDLE TEXT CHANGED for ${type.name}: New value is '$value'.");
+    debugPrint("--> Current _selectedColdStorage: '$_selectedColdStorage'");
+    debugPrint("--> Current _selectedProduct: '$_selectedProduct'");
+    debugPrint("--> Current _selectedBrand: '$_selectedBrand'");
+
+    switch (type) {
+      case MasterType.coldStorage:
+        if (_selectedColdStorage != value) {
+          debugPrint(
+            "--> Text does not match selected value. Clearing _selectedColdStorage.",
+          );
+          setState(() => _selectedColdStorage = null);
+        }
+        break;
+      case MasterType.product:
+        if (_selectedProduct != value) {
+          debugPrint(
+            "--> Text does not match selected value. Clearing _selectedProduct.",
+          );
+          setState(() => _selectedProduct = null);
+        }
+        break;
+      case MasterType.brand:
+        if (_selectedBrand != value) {
+          debugPrint(
+            "--> Text does not match selected value. Clearing _selectedBrand.",
+          );
+          setState(() => _selectedBrand = null);
+        }
+        break;
     }
   }
 
@@ -217,222 +365,235 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
               padding: const EdgeInsets.all(16.0),
               child: Form(
                 key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextFormField(
-                      controller: _receiptNumberController,
-                      focusNode: _receiptNumberFocusNode,
-                      autofocus: true, // BUG FIX 4: Initial focus
-                      decoration: const InputDecoration(
-                        labelText: 'Receipt Number',
-                      ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      validator: (value) => value == null || value.isEmpty
-                          ? 'Please enter a receipt number'
-                          : null,
-                      onFieldSubmitted: (_) => FocusScope.of(
-                        context,
-                      ).requestFocus(_coldStorageFocusNode),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildAutocompleteField(
-                      focusNode: _coldStorageFocusNode,
-                      controller: _coldStorageController,
-                      labelText: 'Cold Storage',
-                      options: _coldStorageOptions,
-                      onSelected: (selection) {
-                        setState(() {
-                          _selectedColdStorage = selection;
-                          _coldStorageController.text = selection;
-                        });
-                        FocusScope.of(context).requestFocus(_dateFocusNode);
-                      },
-                      nextFocusNode: _dateFocusNode,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      focusNode: _dateFocusNode,
-                      controller: _dateController,
-                      decoration: InputDecoration(
-                        labelText: 'Inward Date',
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.calendar_today),
-                          onPressed: () => _selectDate(context),
+                child: AbsorbPointer(
+                  absorbing: _isSaving,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextFormField(
+                        controller: _receiptNumberController,
+                        focusNode: _receiptNumberFocusNode,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Receipt Number',
                         ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        validator: (value) => value == null || value.isEmpty
+                            ? 'Please enter a receipt number'
+                            : null,
+                        onFieldSubmitted: (_) => FocusScope.of(
+                          context,
+                        ).requestFocus(_coldStorageFocusNode),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty)
-                          return 'Please enter a date';
-                        try {
-                          DateFormat('dd-MM-yy').parseStrict(value);
-                          return null;
-                        } catch (e) {
-                          return 'Invalid format (dd-MM-yy)';
-                        }
-                      },
-                      onChanged: (value) {
-                        try {
-                          final date = DateFormat(
-                            'dd-MM-yy',
-                          ).parseStrict(value);
-                          setState(() => _selectedDate = date);
-                        } catch (e) {
-                          /* Ignore parsing errors while typing */
-                        }
-                      },
-                      onFieldSubmitted: (_) => FocusScope.of(
-                        context,
-                      ).requestFocus(_productFocusNode),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildAutocompleteField(
-                      focusNode: _productFocusNode,
-                      controller: _productController,
-                      labelText: 'Product',
-                      options: _productOptions,
-                      onSelected: (selection) {
-                        setState(() {
-                          _selectedProduct = selection;
-                          _productController.text = selection;
-                        });
-                        FocusScope.of(context).requestFocus(_brandFocusNode);
-                      },
-                      nextFocusNode: _brandFocusNode,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildAutocompleteField(
-                      focusNode: _brandFocusNode,
-                      controller: _brandController,
-                      labelText: 'Brand',
-                      options: _brandOptions,
-                      onSelected: (selection) {
-                        setState(() {
-                          _selectedBrand = selection;
-                          _brandController.text = selection;
-                        });
-                        FocusScope.of(context).requestFocus(_quantityFocusNode);
-                      },
-                      nextFocusNode: _quantityFocusNode,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _quantityController,
-                      focusNode: _quantityFocusNode,
-                      decoration: const InputDecoration(labelText: 'Quantity'),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      validator: (value) => value == null || value.isEmpty
-                          ? 'Please enter quantity'
-                          : null,
-                      onFieldSubmitted: (_) =>
-                          FocusScope.of(context).requestFocus(_rateFocusNode),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _rateController,
-                      focusNode: _rateFocusNode,
-                      decoration: const InputDecoration(labelText: 'Rate'),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
+                      const SizedBox(height: 16),
+                      _buildAutocompleteField(
+                        masterType: MasterType.coldStorage,
+                        focusNode: _coldStorageFocusNode,
+                        controller: _coldStorageController,
+                        labelText: 'Cold Storage',
+                        options: _coldStorageOptions,
+                        nextFocusNode: _dateFocusNode,
                       ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'^\d+\.?\d{0,2}'),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        focusNode: _dateFocusNode,
+                        controller: _dateController,
+                        decoration: InputDecoration(
+                          labelText: 'Inward Date',
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.calendar_today),
+                            onPressed: () => _selectDate(context),
+                          ),
                         ),
-                      ],
-                      validator: (value) => value == null || value.isEmpty
-                          ? 'Please enter a rate'
-                          : null,
-                      onFieldSubmitted: (_) => FocusScope.of(
-                        context,
-                      ).requestFocus(_narrationFocusNode),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _narrationController,
-                      focusNode: _narrationFocusNode,
-                      decoration: const InputDecoration(
-                        labelText: 'Narration (Optional)',
+                        validator: (value) {
+                          if (value == null || value.isEmpty)
+                            return 'Please enter a date';
+                          try {
+                            DateFormat('dd-MM-yy').parseStrict(value);
+                            return null;
+                          } catch (e) {
+                            return 'Invalid format (dd-MM-yy)';
+                          }
+                        },
+                        onChanged: (value) {
+                          try {
+                            final date = DateFormat(
+                              'dd-MM-yy',
+                            ).parseStrict(value);
+                            setState(() => _selectedDate = date);
+                          } catch (e) {
+                            /* Ignore parsing errors while typing */
+                          }
+                        },
+                        onFieldSubmitted: (_) => FocusScope.of(
+                          context,
+                        ).requestFocus(_productFocusNode),
                       ),
-                      textCapitalization: TextCapitalization.sentences,
-                      maxLines: 2,
-                      textInputAction: TextInputAction
-                          .next, // BUG FIX 3: Change enter key behavior
-                      onFieldSubmitted: (_) => FocusScope.of(
-                        context,
-                      ).requestFocus(_saveButtonFocusNode),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      focusNode: _saveButtonFocusNode,
-                      onPressed: _isSaving ? null : _saveReceipt,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        textStyle: const TextStyle(fontSize: 16),
+                      const SizedBox(height: 16),
+                      _buildAutocompleteField(
+                        masterType: MasterType.product,
+                        focusNode: _productFocusNode,
+                        controller: _productController,
+                        labelText: 'Product',
+                        options: _productOptions,
+                        nextFocusNode: _brandFocusNode,
                       ),
-                      child: _isSaving
-                          ? const SizedBox(
-                              height: 24,
-                              width: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('Save Receipt'),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      _buildAutocompleteField(
+                        masterType: MasterType.brand,
+                        focusNode: _brandFocusNode,
+                        controller: _brandController,
+                        labelText: 'Brand',
+                        options: _brandOptions,
+                        nextFocusNode: _quantityFocusNode,
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _quantityController,
+                        focusNode: _quantityFocusNode,
+                        decoration: const InputDecoration(
+                          labelText: 'Quantity',
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        validator: (value) => value == null || value.isEmpty
+                            ? 'Please enter quantity'
+                            : null,
+                        onFieldSubmitted: (_) =>
+                            FocusScope.of(context).requestFocus(_rateFocusNode),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _rateController,
+                        focusNode: _rateFocusNode,
+                        decoration: const InputDecoration(labelText: 'Rate'),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d+\.?\d{0,2}'),
+                          ),
+                        ],
+                        validator: (value) => value == null || value.isEmpty
+                            ? 'Please enter a rate'
+                            : null,
+                        onFieldSubmitted: (_) => FocusScope.of(
+                          context,
+                        ).requestFocus(_narrationFocusNode),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _narrationController,
+                        focusNode: _narrationFocusNode,
+                        decoration: const InputDecoration(
+                          labelText: 'Narration (Optional)',
+                        ),
+                        textCapitalization: TextCapitalization.sentences,
+                        maxLines: 2,
+                        textInputAction: TextInputAction.next,
+                        onFieldSubmitted: (_) => FocusScope.of(
+                          context,
+                        ).requestFocus(_saveButtonFocusNode),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        focusNode: _saveButtonFocusNode,
+                        onPressed: _isSaving ? null : _saveReceipt,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          textStyle: const TextStyle(fontSize: 16),
+                        ),
+                        child: _isSaving
+                            ? const SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('Save Receipt'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
     );
   }
 
+  // lib/screens/receipt_entry/receipt_entry_screen.dart
+
   Widget _buildAutocompleteField({
+    required MasterType masterType,
     required FocusNode focusNode,
     required TextEditingController controller,
     required String labelText,
     required List<String> options,
-    required ValueChanged<String> onSelected,
     required FocusNode nextFocusNode,
   }) {
     return RawAutocomplete<String>(
       focusNode: focusNode,
       textEditingController: controller,
       optionsBuilder: (TextEditingValue textEditingValue) {
-        if (textEditingValue.text.isEmpty) {
+        final String query = textEditingValue.text;
+        if (query.isEmpty) {
           return const Iterable<String>.empty();
         }
-        return options.where((String option) {
-          return option.toLowerCase().contains(
-            textEditingValue.text.toLowerCase(),
-          );
+        final String lowerCaseQuery = query.toLowerCase();
+        final filteredOptions = options.where((String option) {
+          return option.toLowerCase().contains(lowerCaseQuery);
         });
+
+        final bool isNew = !options.any(
+          (element) => element.toLowerCase() == lowerCaseQuery,
+        );
+
+        if (isNew && query.isNotEmpty) {
+          // Also check that query is not empty
+          return [...filteredOptions, 'Add "$query"'];
+        }
+
+        return filteredOptions;
       },
-      onSelected: onSelected,
+      onSelected: (String selection) {
+        if (selection.startsWith('Add "') && selection.endsWith('"')) {
+          final newName = selection.substring(5, selection.length - 1);
+          _handleAddNewItem(masterType, newName);
+        } else {
+          _handleSelection(masterType, selection);
+        }
+      },
       fieldViewBuilder:
           (
             BuildContext context,
             TextEditingController fieldTextEditingController,
             FocusNode fieldFocusNode,
-            VoidCallback onFieldSubmitted,
+            VoidCallback
+            onFieldSubmitted, // This callback is provided by RawAutocomplete
           ) {
             return TextFormField(
               controller: fieldTextEditingController,
               focusNode: fieldFocusNode,
               decoration: InputDecoration(labelText: labelText),
+              onChanged: (value) => _handleTextChanged(masterType, value),
               validator: (value) {
-                if (value == null || value.isEmpty)
-                  return 'Please select a $labelText';
-                if (!options.contains(value))
-                  return 'Please select a valid $labelText from the list';
+                if (value == null || value.isEmpty) {
+                  return 'Please enter or select a $labelText';
+                }
                 return null;
               },
+              // MODIFIED: This is the key change!
               onFieldSubmitted: (_) {
+                // By calling this, we tell the Autocomplete widget to select
+                // the highlighted option, which then triggers our onSelected logic.
                 onFieldSubmitted();
-                FocusScope.of(context).requestFocus(nextFocusNode);
               },
             );
           },
@@ -454,9 +615,20 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
                     itemCount: options.length,
                     itemBuilder: (BuildContext context, int index) {
                       final String option = options.elementAt(index);
-                      // BUG FIX 1: Use a ListTile for highlighting
+                      final bool isAddNewOption = option.startsWith('Add "');
+
                       return ListTile(
-                        title: Text(option),
+                        title: Text(
+                          option,
+                          style: TextStyle(
+                            fontStyle: isAddNewOption
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                            color: isAddNewOption
+                                ? Theme.of(context).primaryColor
+                                : null,
+                          ),
+                        ),
                         onTap: () => onSelected(option),
                         tileColor:
                             AutocompleteHighlightedOption.of(context) == index
