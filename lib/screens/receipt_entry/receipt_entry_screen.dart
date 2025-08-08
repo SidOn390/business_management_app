@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:another_flushbar/flushbar.dart';
 
 import 'package:business_management_app/services/firestore_service.dart';
+import 'package:business_management_app/models/receipt_model.dart';
 
 enum MasterType { coldStorage, product, brand }
 
@@ -107,26 +108,19 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
     }
   }
 
-  // lib/screens/receipt_entry/receipt_entry_screen.dart
-
-  // MODIFIED: This method is now more polished and noticeable.
   void _showTopFlushbar(String message, {bool isError = false}) {
     if (!mounted) return;
     Flushbar(
-      // 1. ADDED A BOLD TITLE
       title: isError ? "An Error Occurred" : "Success",
       message: message,
-      // 2. INCREASED DURATION
       duration: const Duration(seconds: 4),
       flushbarPosition: FlushbarPosition.TOP,
-      // 3. IMPROVED COLORS
       backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
       icon: Icon(
         isError ? Icons.error_outline : Icons.check_circle_outline,
         size: 28.0,
         color: Colors.white,
       ),
-      // 4. ADDED STYLING TO MAKE IT POP
       margin: const EdgeInsets.all(8),
       borderRadius: BorderRadius.circular(8),
       boxShadows: const [
@@ -161,16 +155,6 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
   }
 
   Future<void> _saveReceipt() async {
-    // DEBUG: Log when the save process starts and the current state
-    debugPrint("SAVE RECEIPT: Button pressed.");
-    debugPrint(
-      "--> Value of _selectedColdStorage at save time: '$_selectedColdStorage'",
-    );
-    debugPrint(
-      "--> Value of _selectedProduct at save time: '$_selectedProduct'",
-    );
-    debugPrint("--> Value of _selectedBrand at save time: '$_selectedBrand'");
-
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -195,28 +179,42 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
 
     try {
       final receiptNumber = _receiptNumberController.text;
-
       final int quantity = int.parse(_quantityController.text);
-      final receiptData = {
-        'receiptNumber': receiptNumber,
-        'coldStorageName': _selectedColdStorage,
-        'inwardDate': _selectedDate.toIso8601String(),
-        'productName': _selectedProduct,
-        'brandName': _selectedBrand,
-        'inwardQuantity': quantity,
-        'remainingQuantity': quantity,
-        'rate': double.parse(_rateController.text),
-        'narration': _narrationController.text.trim(),
-        'isPaid': false,
-        'status': 'Active',
-      };
 
-      debugPrint('--- RECEIPT DATA FOR CONSOLE ---');
-      debugPrint(receiptData.toString());
-      debugPrint('---------------------------------');
+      final bool isDuplicate = await _firestoreService.doesReceiptExist(
+        receiptNumber,
+        _selectedColdStorage!,
+      );
 
-      _showTopFlushbar('Receipt data printed to console!');
+      if (isDuplicate) {
+        _showTopFlushbar(
+          'Receipt #$receiptNumber already exists for this cold storage.',
+          isError: true,
+        );
+        setState(() => _isSaving = false);
+        return;
+      }
 
+      // MODIFIED: Create an instance of our new Receipt model
+      final newReceipt = Receipt(
+        receiptNumber: receiptNumber,
+        coldStorageName: _selectedColdStorage!,
+        inwardDate: Timestamp.fromDate(_selectedDate),
+        productName: _selectedProduct!,
+        brandName: _selectedBrand!,
+        inwardQuantity: quantity,
+        remainingQuantity: quantity, // Initially the same
+        rate: double.parse(_rateController.text),
+        narration: _narrationController.text.trim(),
+        // The other fields have default values
+      );
+
+      // Save the receipt to Firebase using the toJson() method
+      await _firestoreService.addReceipt(newReceipt.toJson());
+
+      _showTopFlushbar('Receipt #$receiptNumber has been saved successfully.');
+
+      // Reset form for next entry
       _formKey.currentState!.reset();
       _receiptNumberController.clear();
       _coldStorageController.clear();
@@ -231,7 +229,7 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
       });
       FocusScope.of(context).requestFocus(_receiptNumberFocusNode);
     } catch (e) {
-      _showTopFlushbar('Error processing receipt: $e', isError: true);
+      _showTopFlushbar('Error saving receipt: $e', isError: true);
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
@@ -240,10 +238,6 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
   }
 
   void _handleSelection(MasterType type, String selection) {
-    // DEBUG: Log which item is being selected
-    debugPrint(
-      "HANDLE SELECTION: Setting selected ${type.name} to '$selection'",
-    );
     setState(() {
       switch (type) {
         case MasterType.coldStorage:
@@ -266,8 +260,6 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
   }
 
   Future<void> _handleAddNewItem(MasterType type, String newName) async {
-    // DEBUG: Log when we add a new item
-    debugPrint("HANDLE ADD NEW ITEM: Received '$newName' for ${type.name}");
     setState(() => _isSaving = true);
 
     String collectionName;
@@ -321,36 +313,16 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
   }
 
   void _handleTextChanged(MasterType type, String value) {
-    // DEBUG: Log every time the text changes and what the current state is.
-    debugPrint("HANDLE TEXT CHANGED for ${type.name}: New value is '$value'.");
-    debugPrint("--> Current _selectedColdStorage: '$_selectedColdStorage'");
-    debugPrint("--> Current _selectedProduct: '$_selectedProduct'");
-    debugPrint("--> Current _selectedBrand: '$_selectedBrand'");
-
     switch (type) {
       case MasterType.coldStorage:
-        if (_selectedColdStorage != value) {
-          debugPrint(
-            "--> Text does not match selected value. Clearing _selectedColdStorage.",
-          );
+        if (_selectedColdStorage != value)
           setState(() => _selectedColdStorage = null);
-        }
         break;
       case MasterType.product:
-        if (_selectedProduct != value) {
-          debugPrint(
-            "--> Text does not match selected value. Clearing _selectedProduct.",
-          );
-          setState(() => _selectedProduct = null);
-        }
+        if (_selectedProduct != value) setState(() => _selectedProduct = null);
         break;
       case MasterType.brand:
-        if (_selectedBrand != value) {
-          debugPrint(
-            "--> Text does not match selected value. Clearing _selectedBrand.",
-          );
-          setState(() => _selectedBrand = null);
-        }
+        if (_selectedBrand != value) setState(() => _selectedBrand = null);
         break;
     }
   }
@@ -528,8 +500,6 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
     );
   }
 
-  // lib/screens/receipt_entry/receipt_entry_screen.dart
-
   Widget _buildAutocompleteField({
     required MasterType masterType,
     required FocusNode focusNode,
@@ -556,7 +526,6 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
         );
 
         if (isNew && query.isNotEmpty) {
-          // Also check that query is not empty
           return [...filteredOptions, 'Add "$query"'];
         }
 
@@ -575,8 +544,7 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
             BuildContext context,
             TextEditingController fieldTextEditingController,
             FocusNode fieldFocusNode,
-            VoidCallback
-            onFieldSubmitted, // This callback is provided by RawAutocomplete
+            VoidCallback onFieldSubmitted,
           ) {
             return TextFormField(
               controller: fieldTextEditingController,
@@ -589,10 +557,7 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
                 }
                 return null;
               },
-              // MODIFIED: This is the key change!
               onFieldSubmitted: (_) {
-                // By calling this, we tell the Autocomplete widget to select
-                // the highlighted option, which then triggers our onSelected logic.
                 onFieldSubmitted();
               },
             );
