@@ -220,6 +220,10 @@ class _ReceiptEntryScreenState extends State<ReceiptEntryScreen> {
       _coldStorageController.clear();
       _productController.clear();
       _brandController.clear();
+      _quantityController.clear();
+      _rateController.clear();
+      _narrationController.clear();
+
       setState(() {
         _selectedDate = DateTime.now();
         _dateController.text = DateFormat('dd-MM-yy').format(_selectedDate);

@@ -1,5 +1,6 @@
 // lib/services/firestore_service.dart
 
+import 'package:business_management_app/models/receipt_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class FirestoreService {
@@ -70,6 +71,18 @@ class FirestoreService {
   /// Adds a new receipt document to the 'receipts' collection.
   Future<void> addReceipt(Map<String, dynamic> receiptData) {
     return _db.collection('receipts').add(receiptData);
+  }
+
+  /// Retrieves a stream of all receipts, ordered by creation date.
+  Stream<List<Receipt>> getReceipts() {
+    return _db
+        .collection('receipts')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snapshot) =>
+              snapshot.docs.map((doc) => Receipt.fromFirestore(doc)).toList(),
+        );
   }
 
   /// Checks if a receipt with the given number already exists for a specific cold storage.
